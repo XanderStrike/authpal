@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  proxy:
+    build: .
+    ports:
+      - "8080:80" 
+    environment:
+      USER: admin # Change this
+      PASS: password # Change this
+      APP_HOST: app # This is the service name of your application container
+      APP_PORT: 80 # This is the internal port your xanderstrike/web app listens on
+    depends_on:
+      - app
+
+  app:
+    image: xanderstrike/web
+    # If your application needs specific environment variables or volumes,
+    # you can define them here. For example:
+    # environment:
+    #   - NODE_ENV=production
+    # volumes:
+    #   - ./app-data:/var/www/html
+    # If your app listens on a port other than 80 internally,
+    # make sure APP_PORT above matches it.
+    # You typically don't need to expose ports here if access is only via the proxy.
