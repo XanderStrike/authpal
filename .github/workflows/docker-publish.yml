@@ -11,11 +11,70 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+    
+    - name: Build authpal image for testing
+      run: docker build -t authpal-test .
+    
+    - name: Test basic functionality
+      run: |
+        # Start a simple test web server
+        docker run -d --name test-app -p 8081:80 nginx:alpine
+        
+        # Wait for test app to be ready
+        sleep 5
+        
+        # Start authpal proxy
+        docker run -d --name authpal-test \
+          -p 8080:80 \
+          -e USER=testuser \
+          -e PASS=testpass \
+          -e APP_HOST=host.docker.internal \
+          -e APP_PORT=8081 \
+          --add-host=host.docker.internal:host-gateway \
+          authpal-test
+        
+        # Wait for authpal to be ready
+        sleep 10
+        
+        # Test 1: Unauthenticated request should return 401
+        echo "Testing unauthenticated request..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
+        if [ "$response" != "401" ]; then
+          echo "❌ Expected 401 for unauthenticated request, got $response"
+          exit 1
+        fi
+        echo "✅ Unauthenticated request correctly rejected (401)"
+        
+        # Test 2: Authenticated request should return 200
+        echo "Testing authenticated request..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass http://localhost:8080/ || echo "000")
+        if [ "$response" != "200" ]; then
+          echo "❌ Expected 200 for authenticated request, got $response"
+          exit 1
+        fi
+        echo "✅ Authenticated request successfully proxied (200)"
+        
+        # Test 3: Wrong credentials should return 401
+        echo "Testing wrong credentials..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:wrongpass http://localhost:8080/ || echo "000")
+        if [ "$response" != "401" ]; then
+          echo "❌ Expected 401 for wrong credentials, got $response"
+          exit 1
+        fi
+        echo "✅ Wrong credentials correctly rejected (401)"
+        
+        # Clean up
+        docker stop authpal-test test-app
+        docker rm authpal-test test-app
+        
+        echo "🎉 All tests passed! Basic functionality is working correctly."
+    
     - name: Docker Login
       uses: docker/login-action@v2.1.0
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
+    
     - name: Build and push
       uses: docker/build-push-action@v3
       with:
